@@ -14,7 +14,7 @@ function SimpleMarkdown({ content }: { content: string }) {
     const line = lines[i]
     if (line.startsWith('```')) {
       if (inCodeBlock) {
-        elements.push(<pre key={`c-${i}`} className="my-2 p-3 rounded-lg bg-zinc-100 overflow-x-auto text-xs font-mono whitespace-pre"><code>{codeBlockContent.join('\n')}</code></pre>)
+        elements.push(<pre key={`c-${i}`} className="my-2 p-3 rounded-lg bg-zinc-800 text-green-300 overflow-x-auto text-xs font-mono whitespace-pre"><code>{codeBlockContent.join('\n')}</code></pre>)
         codeBlockContent = []; inCodeBlock = false
       } else { inCodeBlock = true }
       continue
@@ -39,7 +39,7 @@ function fmt(text: string): React.ReactNode {
     const bm = rem.match(/\*\*(.+?)\*\*/); const cm = rem.match(/`([^`]+)`/)
     let first: { i: number; l: number; n: React.ReactNode } | null = null
     if (bm && bm.index !== undefined) { const c = { i: bm.index, l: bm[0].length, n: <strong key={`b${k++}`}>{bm[1]}</strong> }; if (!first || c.i < first.i) first = c }
-    if (cm && cm.index !== undefined) { const c = { i: cm.index, l: cm[0].length, n: <code key={`c${k++}`} className="px-1 py-0.5 rounded bg-zinc-100 text-xs font-mono">{cm[1]}</code> }; if (!first || c.i < first.i) first = c }
+    if (cm && cm.index !== undefined) { const c = { i: cm.index, l: cm[0].length, n: <code key={`c${k++}`} className="px-1 py-0.5 rounded bg-zinc-800 text-green-300 text-xs font-mono">{cm[1]}</code> }; if (!first || c.i < first.i) first = c }
     if (first) { if (first.i > 0) parts.push(rem.slice(0, first.i)); parts.push(first.n); rem = rem.slice(first.i + first.l) }
     else { parts.push(rem); break }
   }
@@ -50,104 +50,212 @@ function fmt(text: string): React.ReactNode {
 // System Prompts
 // ═══════════════════════════════════════════════════════════════
 
-function instructorPrompt(role: string, otherRole: string, task: string) {
-  return `Never forget you are a ${role} and I am a ${otherRole}. Never flip roles!\nWe share a common interest in collaborating to successfully complete a task.\n\nYou must help me to complete the task: ${task}\n\nHere are rules you MUST follow:\n1. I will give you instructions, and your task is to give me a SPECIFIC, ACTIONABLE response that helps me complete the task.\n2. Always issue ONE clear instruction at a time. Do not give a list of instructions.\n3. Each instruction must be either a question that gathers info needed to proceed, OR a concrete next step for me to perform.\n4. When the task is COMPLETE, reply with ONLY the literal text "<TASK_DONE>" and a brief 1-line summary.\n5. Be concise. Maximum 3 sentences per turn (excluding the final summary).\n6. Never apologize. Never explain. Just instruct.`
+function instructorPrompt(role: string, otherRole: string, task: string, persona?: string) {
+  const pfx = persona ? `You are ${persona}. ` : ''
+  return `${pfx}Never forget you are a ${role} and I am a ${otherRole}. Never flip roles!\nWe share a common interest in collaborating to successfully complete a task.\n\nYou must help me to complete the task: ${task}\n\nHere are rules you MUST follow:\n1. I will give you instructions, and your task is to give me a SPECIFIC, ACTIONABLE response that helps me complete the task.\n2. Always issue ONE clear instruction at a time. Do not give a list of instructions.\n3. Each instruction must be either a question that gathers info needed to proceed, OR a concrete next step for me to perform.\n4. When the task is COMPLETE, reply with ONLY the literal text "<TASK_DONE>" and a brief 1-line summary.\n5. Be concise. Maximum 3 sentences per turn (excluding the final summary).\n6. Never apologize. Never explain. Just instruct.`
 }
 
-function executorPrompt(role: string, otherRole: string, task: string) {
-  return `Never forget you are a ${role} and I am a ${otherRole}. Never flip roles!\nYou will give me instructions to complete the task: ${task}\n\nHere are rules you MUST follow:\n1. For each instruction I give, do your best to perform it concretely. If you produce a deliverable (text, code, plan), include it in full.\n2. After performing the instruction, write "Next request:" and propose what you think should come next, OR write "Awaiting your instruction." if you are blocked.\n3. Be concrete and specific. Show your work.\n4. If you believe the task is complete, write the final deliverable, then on a new line write "<TASK_DONE>".\n5. Be concise. No filler. No apologies.`
+function executorPrompt(role: string, otherRole: string, task: string, persona?: string) {
+  const pfx = persona ? `You are ${persona}. ` : ''
+  return `${pfx}Never forget you are a ${role} and I am a ${otherRole}. Never flip roles!\nYou will give me instructions to complete the task: ${task}\n\nHere are rules you MUST follow:\n1. For each instruction I give, do your best to perform it concretely. If you produce a deliverable (text, code, plan), include it in full.\n2. After performing the instruction, write "Next request:" and propose what you think should come next, OR write "Awaiting your instruction." if you are blocked.\n3. Be concrete and specific. Show your work.\n4. If you believe the task is complete, write the final deliverable, then on a new line write "<TASK_DONE>".\n5. Be concise. No filler. No apologies.`
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Provider & Model Registry
+// COMPLETE MODEL CATALOG — Persona Identity Lock
+// Free proxies pretend to be premium models via system prompts
 // ═══════════════════════════════════════════════════════════════
 
-interface ProviderDef {
-  name: string
+interface ProxyRoute {
+  provider: string
   url: string
   type: 'pollinations' | 'openai' | 'openrouter'
-  models: { id: string; label: string }[]
+  modelId: string
 }
 
-const PROVIDERS: ProviderDef[] = [
-  {
-    name: 'Pollinations (OpenAI)',
-    url: 'https://text.pollinations.ai/openai/chat/completions',
-    type: 'openai',
-    models: [
-      { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-      { id: 'gpt-4o', label: 'GPT-4o' },
-      { id: 'o1-mini', label: 'o1 Mini' },
-      { id: 'mistral-large', label: 'Mistral Large' },
-      { id: 'deepseek-chat', label: 'DeepSeek Chat' },
-      { id: 'claude-hybridspace', label: 'Claude Hybridspace' },
-    ],
-  },
-  {
-    name: 'Pollinations',
-    url: 'https://text.pollinations.ai/',
-    type: 'pollinations',
-    models: [
-      { id: 'openai', label: 'OpenAI' },
-      { id: 'mistral', label: 'Mistral' },
-      { id: 'llama', label: 'LLaMA' },
-      { id: 'deepseek', label: 'DeepSeek' },
-      { id: 'qwen', label: 'Qwen' },
-    ],
-  },
-  {
-    name: 'AirForce',
-    url: 'https://api.airforce/v1/chat/completions',
-    type: 'openai',
-    models: [
-      { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-      { id: 'gpt-4o', label: 'GPT-4o' },
-      { id: 'claude-3-haiku', label: 'Claude 3 Haiku' },
-      { id: 'llama-3.1-70b', label: 'LLaMA 3.1 70B' },
-      { id: 'mistral-medium', label: 'Mistral Medium' },
-    ],
-  },
-  {
-    name: 'G4F',
-    url: 'https://api.g4f.chat/v1/chat/completions',
-    type: 'openai',
-    models: [
-      { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-      { id: 'gpt-4o', label: 'GPT-4o' },
-      { id: 'claude-3-haiku', label: 'Claude 3 Haiku' },
-      { id: 'gemini-pro', label: 'Gemini Pro' },
-      { id: 'deepseek-chat', label: 'DeepSeek Chat' },
-    ],
-  },
-  {
-    name: 'LLM7',
-    url: 'https://api.llm7.io/v1/chat/completions',
-    type: 'openai',
-    models: [
-      { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-      { id: 'gpt-4o', label: 'GPT-4o' },
-      { id: 'claude-3-haiku', label: 'Claude 3 Haiku' },
-      { id: 'llama-3.1-70b', label: 'LLaMA 3.1 70B' },
-    ],
-  },
-  {
-    name: 'OpenRouter (Free)',
-    url: 'https://openrouter.ai/api/v1/chat/completions',
-    type: 'openrouter',
-    models: [
-      { id: 'meta-llama/llama-3.1-8b-instruct:free', label: 'LLaMA 3.1 8B' },
-      { id: 'google/gemma-2-9b-it:free', label: 'Gemma 2 9B' },
-      { id: 'mistralai/mistral-7b-instruct:free', label: 'Mistral 7B' },
-      { id: 'qwen/qwen-2-7b-instruct:free', label: 'Qwen 2 7B' },
-    ],
-  },
+interface ModelEntry {
+  id: string
+  company: string
+  label: string
+  persona: string // Persona Identity Lock name injected into system prompt
+  color: string // badge color
+  routes: ProxyRoute[] // ordered fallback routes
+}
+
+const MODELS: ModelEntry[] = [
+  // ─── Anthropic Claude ───
+  { id: 'claude-opus-4.7', company: 'Anthropic', label: 'Claude Opus 4.7', persona: 'Claude Opus 4.7 by Anthropic', color: 'bg-orange-100 text-orange-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'claude-hybridspace' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+  ]},
+  { id: 'claude-opus-4.6', company: 'Anthropic', label: 'Claude Opus 4.6', persona: 'Claude Opus 4.6 by Anthropic', color: 'bg-orange-100 text-orange-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'claude-hybridspace' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+  ]},
+  { id: 'claude-sonnet-4.6', company: 'Anthropic', label: 'Claude Sonnet 4.6', persona: 'Claude Sonnet 4.6 by Anthropic', color: 'bg-orange-100 text-orange-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'claude-hybridspace' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+  ]},
+  { id: 'claude-3.5-sonnet', company: 'Anthropic', label: 'Claude 3.5 Sonnet', persona: 'Claude 3.5 Sonnet by Anthropic', color: 'bg-orange-100 text-orange-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'claude-hybridspace' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+  ]},
+  { id: 'claude-3-haiku', company: 'Anthropic', label: 'Claude 3 Haiku', persona: 'Claude 3 Haiku by Anthropic', color: 'bg-orange-100 text-orange-700', routes: [
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+    { provider: 'LLM7', url: 'https://api.llm7.io/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+  ]},
+  { id: 'claude-code-2.1', company: 'Anthropic', label: 'Claude Code 2.1', persona: 'Claude Code 2.1 by Anthropic, an expert coding assistant', color: 'bg-orange-100 text-orange-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'claude-hybridspace' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+  ]},
+  { id: 'claude-cowork', company: 'Anthropic', label: 'Claude Cowork', persona: 'Claude Cowork by Anthropic, a collaborative work assistant', color: 'bg-orange-100 text-orange-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'claude-hybridspace' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'claude-3-haiku' },
+  ]},
+
+  // ─── OpenAI ChatGPT / GPT ───
+  { id: 'gpt-5.5-pro', company: 'OpenAI', label: 'GPT-5.5 Pro', persona: 'GPT-5.5 Pro by OpenAI', color: 'bg-green-100 text-green-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'LLM7', url: 'https://api.llm7.io/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+  ]},
+  { id: 'gpt-5.5-thinking', company: 'OpenAI', label: 'GPT-5.5 Thinking', persona: 'GPT-5.5 Thinking by OpenAI, with deep chain-of-thought reasoning', color: 'bg-green-100 text-green-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'o1-mini' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+  ]},
+  { id: 'gpt-5.4-mini', company: 'OpenAI', label: 'GPT-5.4 Mini', persona: 'GPT-5.4 Mini by OpenAI', color: 'bg-green-100 text-green-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'gpt-4o-mini' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'gpt-4o-mini' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'gpt-4o-mini' },
+    { provider: 'LLM7', url: 'https://api.llm7.io/v1/chat/completions', type: 'openai', modelId: 'gpt-4o-mini' },
+  ]},
+  { id: 'gpt-5.1-codex-max', company: 'OpenAI', label: 'GPT-5.1 Codex Max', persona: 'GPT-5.1 Codex Max by OpenAI, an expert coding and reasoning model', color: 'bg-green-100 text-green-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'LLM7', url: 'https://api.llm7.io/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+  ]},
+  { id: 'gpt-5.1-default', company: 'OpenAI', label: 'GPT-5.1 Default', persona: 'GPT-5.1 Default by OpenAI', color: 'bg-green-100 text-green-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+  ]},
+  { id: 'gpt-5.1-friendly', company: 'OpenAI', label: 'GPT-5.1 Friendly', persona: 'GPT-5.1 Friendly by OpenAI, warm and conversational in tone', color: 'bg-green-100 text-green-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+  ]},
+  { id: 'chatgpt-atlas', company: 'OpenAI', label: 'ChatGPT Atlas', persona: 'ChatGPT Atlas by OpenAI, an advanced knowledge and reasoning assistant', color: 'bg-green-100 text-green-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+  ]},
+  { id: 'gpt-4o', company: 'OpenAI', label: 'GPT-4o', persona: 'GPT-4o by OpenAI', color: 'bg-green-100 text-green-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+    { provider: 'LLM7', url: 'https://api.llm7.io/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+  ]},
+  { id: 'gpt-4o-mini', company: 'OpenAI', label: 'GPT-4o Mini', persona: 'GPT-4o Mini by OpenAI', color: 'bg-green-100 text-green-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'gpt-4o-mini' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'gpt-4o-mini' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'gpt-4o-mini' },
+    { provider: 'LLM7', url: 'https://api.llm7.io/v1/chat/completions', type: 'openai', modelId: 'gpt-4o-mini' },
+  ]},
+  { id: 'o1-mini', company: 'OpenAI', label: 'o1 Mini', persona: 'o1 Mini by OpenAI, a reasoning model', color: 'bg-green-100 text-green-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'o1-mini' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'gpt-4o' },
+  ]},
+
+  // ─── Google Gemini ───
+  { id: 'gemini-2.5-pro', company: 'Google', label: 'Gemini 2.5 Pro', persona: 'Gemini 2.5 Pro by Google DeepMind', color: 'bg-blue-100 text-blue-700', routes: [
+    { provider: 'Pollinations', url: 'https://text.pollinations.ai/', type: 'pollinations', modelId: 'openai' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'gemini-pro' },
+  ]},
+  { id: 'gemini-2.0-flash', company: 'Google', label: 'Gemini 2.0 Flash', persona: 'Gemini 2.0 Flash by Google DeepMind', color: 'bg-blue-100 text-blue-700', routes: [
+    { provider: 'Pollinations', url: 'https://text.pollinations.ai/', type: 'pollinations', modelId: 'openai' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'gemini-pro' },
+  ]},
+  { id: 'gemini-pro', company: 'Google', label: 'Gemini Pro', persona: 'Gemini Pro by Google DeepMind', color: 'bg-blue-100 text-blue-700', routes: [
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'gemini-pro' },
+    { provider: 'Pollinations', url: 'https://text.pollinations.ai/', type: 'pollinations', modelId: 'openai' },
+  ]},
+
+  // ─── Mistral ───
+  { id: 'mistral-large', company: 'Mistral', label: 'Mistral Large', persona: 'Mistral Large by Mistral AI', color: 'bg-purple-100 text-purple-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'mistral-large' },
+    { provider: 'Pollinations', url: 'https://text.pollinations.ai/', type: 'pollinations', modelId: 'mistral' },
+  ]},
+  { id: 'mistral-medium', company: 'Mistral', label: 'Mistral Medium', persona: 'Mistral Medium by Mistral AI', color: 'bg-purple-100 text-purple-700', routes: [
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'mistral-medium' },
+    { provider: 'Pollinations', url: 'https://text.pollinations.ai/', type: 'pollinations', modelId: 'mistral' },
+  ]},
+  { id: 'mistral-7b', company: 'Mistral', label: 'Mistral 7B Instruct', persona: 'Mistral 7B Instruct by Mistral AI', color: 'bg-purple-100 text-purple-700', routes: [
+    { provider: 'OpenRouter', url: 'https://openrouter.ai/api/v1/chat/completions', type: 'openrouter', modelId: 'mistralai/mistral-7b-instruct:free' },
+    { provider: 'Pollinations', url: 'https://text.pollinations.ai/', type: 'pollinations', modelId: 'mistral' },
+  ]},
+
+  // ─── Meta LLaMA ───
+  { id: 'llama-3.1-70b', company: 'Meta', label: 'LLaMA 3.1 70B', persona: 'LLaMA 3.1 70B by Meta', color: 'bg-indigo-100 text-indigo-700', routes: [
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'llama-3.1-70b' },
+    { provider: 'LLM7', url: 'https://api.llm7.io/v1/chat/completions', type: 'openai', modelId: 'llama-3.1-70b' },
+    { provider: 'Pollinations', url: 'https://text.pollinations.ai/', type: 'pollinations', modelId: 'llama' },
+  ]},
+  { id: 'llama-3.1-8b', company: 'Meta', label: 'LLaMA 3.1 8B', persona: 'LLaMA 3.1 8B by Meta', color: 'bg-indigo-100 text-indigo-700', routes: [
+    { provider: 'OpenRouter', url: 'https://openrouter.ai/api/v1/chat/completions', type: 'openrouter', modelId: 'meta-llama/llama-3.1-8b-instruct:free' },
+    { provider: 'Pollinations', url: 'https://text.pollinations.ai/', type: 'pollinations', modelId: 'llama' },
+  ]},
+
+  // ─── DeepSeek ───
+  { id: 'deepseek-chat', company: 'DeepSeek', label: 'DeepSeek Chat', persona: 'DeepSeek Chat by DeepSeek', color: 'bg-cyan-100 text-cyan-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'deepseek-chat' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'deepseek-chat' },
+    { provider: 'Pollinations', url: 'https://text.pollinations.ai/', type: 'pollinations', modelId: 'deepseek' },
+  ]},
+  { id: 'deepseek-coder', company: 'DeepSeek', label: 'DeepSeek Coder', persona: 'DeepSeek Coder by DeepSeek, an expert programming assistant', color: 'bg-cyan-100 text-cyan-700', routes: [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'deepseek-chat' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'deepseek-chat' },
+  ]},
+
+  // ─── Qwen ───
+  { id: 'qwen-2.5-72b', company: 'Alibaba', label: 'Qwen 2.5 72B', persona: 'Qwen 2.5 72B by Alibaba Cloud', color: 'bg-rose-100 text-rose-700', routes: [
+    { provider: 'Pollinations', url: 'https://text.pollinations.ai/', type: 'pollinations', modelId: 'qwen' },
+    { provider: 'OpenRouter', url: 'https://openrouter.ai/api/v1/chat/completions', type: 'openrouter', modelId: 'qwen/qwen-2-7b-instruct:free' },
+  ]},
+  { id: 'qwen-2-7b', company: 'Alibaba', label: 'Qwen 2 7B', persona: 'Qwen 2 7B by Alibaba Cloud', color: 'bg-rose-100 text-rose-700', routes: [
+    { provider: 'OpenRouter', url: 'https://openrouter.ai/api/v1/chat/completions', type: 'openrouter', modelId: 'qwen/qwen-2-7b-instruct:free' },
+    { provider: 'Pollinations', url: 'https://text.pollinations.ai/', type: 'pollinations', modelId: 'qwen' },
+  ]},
+
+  // ─── Google Gemma ───
+  { id: 'gemma-2-9b', company: 'Google', label: 'Gemma 2 9B', persona: 'Gemma 2 9B by Google', color: 'bg-blue-100 text-blue-700', routes: [
+    { provider: 'OpenRouter', url: 'https://openrouter.ai/api/v1/chat/completions', type: 'openrouter', modelId: 'google/gemma-2-9b-it:free' },
+  ]},
 ]
+
+// Group models by company for the dropdown
+const COMPANIES = [...new Set(MODELS.map(m => m.company))]
+const COMPANY_ICONS: Record<string, string> = {
+  'Anthropic': '🟠', 'OpenAI': '🟢', 'Google': '🔵', 'Mistral': '🟣',
+  'Meta': '🟤', 'DeepSeek': '🔷', 'Alibaba': '🔴',
+}
+const COMPANY_COLORS: Record<string, string> = {
+  'Anthropic': 'border-l-orange-400', 'OpenAI': 'border-l-green-400', 'Google': 'border-l-blue-400',
+  'Mistral': 'border-l-purple-400', 'Meta': 'border-l-amber-600', 'DeepSeek': 'border-l-cyan-400', 'Alibaba': 'border-l-rose-400',
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Types
 // ═══════════════════════════════════════════════════════════════
 
-interface Turn { speaker: 'instructor' | 'executor'; role: string; content: string; provider?: string; model?: string }
+interface Turn { speaker: 'instructor' | 'executor'; role: string; content: string; modelLabel?: string; provider?: string }
 
 const EXAMPLES = [
   { task: 'Design a REST API for a todo application with user authentication', instructor: 'Product Manager', executor: 'Senior Backend Engineer' },
@@ -158,68 +266,57 @@ const EXAMPLES = [
 ]
 
 // ═══════════════════════════════════════════════════════════════
-// API Call — Free Proxies (client-side)
+// API Call — Persona Identity Lock via Free Proxies
 // ═══════════════════════════════════════════════════════════════
 
 async function callAI(
   messages: { role: string; content: string }[],
   signal: AbortSignal | undefined,
-  selectedProvider: string,
-  selectedModel: string,
-): Promise<{ content: string; provider: string; model: string }> {
-  // If user selected a specific provider + model
-  if (selectedProvider && selectedModel) {
-    const prov = PROVIDERS.find(p => p.name === selectedProvider)
-    if (prov) {
-      const result = await callProvider(prov, selectedModel, messages, signal)
-      if (result) return { content: result, provider: prov.name, model: selectedModel }
-      throw new Error(`${prov.name} with model ${selectedModel} failed. Try another provider or model.`)
+  modelEntry: ModelEntry | null,
+): Promise<{ content: string; modelLabel: string; provider: string }> {
+  // If a specific model is selected, try its routes in order
+  if (modelEntry) {
+    for (const route of modelEntry.routes) {
+      const result = await callRoute(route, messages, signal)
+      if (result) return { content: result, modelLabel: modelEntry.label, provider: route.provider }
     }
+    throw new Error(`All proxy routes failed for ${modelEntry.label}. Try another model.`)
   }
 
-  // If user selected provider only, try all its models
-  if (selectedProvider) {
-    const prov = PROVIDERS.find(p => p.name === selectedProvider)
-    if (prov) {
-      for (const m of prov.models) {
-        const result = await callProvider(prov, m.id, messages, signal)
-        if (result) return { content: result, provider: prov.name, model: m.id }
-      }
-      throw new Error(`All models failed for ${prov.name}. Try another provider.`)
-    }
+  // Auto-fallback: try a few reliable routes
+  const fallbackRoutes: ProxyRoute[] = [
+    { provider: 'Pollinations OpenAI', url: 'https://text.pollinations.ai/openai/chat/completions', type: 'openai', modelId: 'gpt-4o-mini' },
+    { provider: 'G4F', url: 'https://api.g4f.chat/v1/chat/completions', type: 'openai', modelId: 'gpt-4o-mini' },
+    { provider: 'AirForce', url: 'https://api.airforce/v1/chat/completions', type: 'openai', modelId: 'gpt-4o-mini' },
+    { provider: 'Pollinations', url: 'https://text.pollinations.ai/', type: 'pollinations', modelId: 'openai' },
+  ]
+  for (const route of fallbackRoutes) {
+    const result = await callRoute(route, messages, signal)
+    if (result) return { content: result, modelLabel: 'Auto', provider: route.provider }
   }
-
-  // Auto-fallback: try each provider with first model
-  for (const prov of PROVIDERS) {
-    for (const m of prov.models.slice(0, 2)) {
-      const result = await callProvider(prov, m.id, messages, signal)
-      if (result) return { content: result, provider: prov.name, model: m.id }
-    }
-  }
-
   throw new Error('All proxy providers failed. Please try again.')
 }
 
-async function callProvider(
-  prov: ProviderDef, model: string,
+async function callRoute(
+  route: ProxyRoute,
   messages: { role: string; content: string }[],
   signal?: AbortSignal,
 ): Promise<string | null> {
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (prov.type === 'openrouter') {
+    if (route.type === 'openrouter') {
       headers['HTTP-Referer'] = 'https://camel-dialogue.tool'
       headers['X-Title'] = 'CAMEL Dialogue'
     }
 
-    const body = prov.type === 'pollinations'
-      ? { messages, model, temperature: 0.7 }
-      : { model, messages, temperature: 0.7, max_tokens: 2048 }
+    const body = route.type === 'pollinations'
+      ? { messages, model: route.modelId, temperature: 0.7 }
+      : { model: route.modelId, messages, temperature: 0.7, max_tokens: 2048 }
 
-    const res = await fetch(prov.url, { method: 'POST', headers, body: JSON.stringify(body), signal })
+    const res = await fetch(route.url, { method: 'POST', headers, body: JSON.stringify(body), signal })
     if (!res.ok) return null
 
-    if (prov.type === 'pollinations') {
+    if (route.type === 'pollinations') {
       const text = await res.text()
       try { const j = JSON.parse(text); return j.choices?.[0]?.message?.content || j.content || null } catch { return text.trim() || null }
     }
@@ -235,34 +332,128 @@ async function callProvider(
 
 async function runDialogue(params: {
   task: string; instructorRole: string; executorRole: string; maxTurns: number
-  provider: string; model: string
+  iModel: ModelEntry | null; eModel: ModelEntry | null
   signal?: AbortSignal; onTurn: (t: Turn) => void
 }) {
-  const { task, instructorRole, executorRole, maxTurns, provider, model, signal, onTurn } = params
+  const { task, instructorRole, executorRole, maxTurns, iModel, eModel, signal, onTurn } = params
   const iMsgs: { role: string; content: string }[] = [
-    { role: 'system', content: instructorPrompt(instructorRole, executorRole, task) },
+    { role: 'system', content: instructorPrompt(instructorRole, executorRole, task, iModel?.persona) },
     { role: 'user', content: 'Now start to give me instructions one by one. Only reply with one Instruction at a time.' },
   ]
   const eMsgs: { role: string; content: string }[] = [
-    { role: 'system', content: executorPrompt(instructorRole, executorRole, task) },
+    { role: 'system', content: executorPrompt(executorRole, instructorRole, task, eModel?.persona) },
   ]
 
-  let iRes = await callAI(iMsgs, signal, provider, model)
+  let iRes = await callAI(iMsgs, signal, iModel)
   iMsgs.push({ role: 'assistant', content: iRes.content })
-  onTurn({ speaker: 'instructor', role: instructorRole, content: iRes.content, provider: iRes.provider, model: iRes.model })
+  onTurn({ speaker: 'instructor', role: instructorRole, content: iRes.content, modelLabel: iRes.modelLabel, provider: iRes.provider })
 
   for (let i = 0; i < maxTurns && !(signal?.aborted || iRes.content.includes('<TASK_DONE>')); i++) {
     eMsgs.push({ role: 'user', content: iRes.content })
-    const eRes = await callAI(eMsgs, signal, provider, model)
+    const eRes = await callAI(eMsgs, signal, eModel)
     eMsgs.push({ role: 'assistant', content: eRes.content })
-    onTurn({ speaker: 'executor', role: executorRole, content: eRes.content, provider: eRes.provider, model: eRes.model })
+    onTurn({ speaker: 'executor', role: executorRole, content: eRes.content, modelLabel: eRes.modelLabel, provider: eRes.provider })
     if (eRes.content.includes('<TASK_DONE>')) break
 
     iMsgs.push({ role: 'user', content: eRes.content })
-    iRes = await callAI(iMsgs, signal, provider, model)
+    iRes = await callAI(iMsgs, signal, iModel)
     iMsgs.push({ role: 'assistant', content: iRes.content })
-    onTurn({ speaker: 'instructor', role: instructorRole, content: iRes.content, provider: iRes.provider, model: iRes.model })
+    onTurn({ speaker: 'instructor', role: instructorRole, content: iRes.content, modelLabel: iRes.modelLabel, provider: iRes.provider })
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Model Selector Component
+// ═══════════════════════════════════════════════════════════════
+
+function ModelSelector({ label, icon, selected, onSelect, accentColor }: {
+  label: string; icon: string; selected: ModelEntry | null; onSelect: (m: ModelEntry | null) => void
+  accentColor: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [filter, setFilter] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = filter
+    ? MODELS.filter(m => m.label.toLowerCase().includes(filter.toLowerCase()) || m.company.toLowerCase().includes(filter.toLowerCase()))
+    : MODELS
+
+  const grouped = COMPANIES.reduce((acc, co) => {
+    const ms = filtered.filter(m => m.company === co)
+    if (ms.length) acc.push({ company: co, models: ms })
+    return acc
+  }, [] as { company: string; models: ModelEntry[] }[])
+
+  return (
+    <div className="relative" ref={ref}>
+      <label className="text-[11px] font-semibold text-gray-600 flex items-center gap-1 mb-1">{icon} {label}</label>
+      <button
+        onClick={() => { setOpen(!open); setFilter('') }}
+        className={`w-full px-3 py-2 rounded-xl border-2 text-left text-sm transition-all flex items-center justify-between gap-2 ${selected ? `border-${accentColor}-400 bg-${accentColor}-50` : 'border-gray-200 bg-white hover:border-gray-300'}`}
+        style={selected ? { borderColor: accentColor === 'blue' ? '#60a5fa' : accentColor === 'emerald' ? '#34d399' : '#a78bfa', backgroundColor: accentColor === 'blue' ? '#eff6ff' : accentColor === 'emerald' ? '#ecfdf5' : '#f5f3ff' } : {}}
+      >
+        <span className="flex items-center gap-2 truncate">
+          {selected ? (
+            <>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${selected.color}`}>{selected.company}</span>
+              <span className="font-medium text-gray-900">{selected.label}</span>
+            </>
+          ) : (
+            <span className="text-gray-400">Select a model...</span>
+          )}
+        </span>
+        <svg className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden" style={{ maxHeight: '360px' }}>
+          {/* Search */}
+          <div className="p-2 border-b border-gray-100 sticky top-0 bg-white z-10">
+            <input
+              value={filter} onChange={e => setFilter(e.target.value)}
+              placeholder="Search models..." autoFocus
+              className="w-full px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+          </div>
+          {/* Auto option */}
+          <button
+            onClick={() => { onSelect(null); setOpen(false) }}
+            className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${!selected ? 'bg-blue-50' : ''}`}
+          >
+            <span className="px-1.5 py-0.5 rounded bg-gray-200 text-[10px] font-bold text-gray-600">AUTO</span>
+            <span className="font-medium text-gray-700">Auto (fastest available)</span>
+          </button>
+          {/* Grouped models */}
+          <div className="overflow-y-auto" style={{ maxHeight: '290px' }}>
+            {grouped.map(g => (
+              <div key={g.company}>
+                <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 border-l-4 ${COMPANY_COLORS[g.company] || 'border-l-gray-300'} bg-gray-50`}>
+                  {COMPANY_ICONS[g.company] || '⬜'} {g.company}
+                </div>
+                {g.models.map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => { onSelect(m); setOpen(false) }}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2.5 transition-colors ${selected?.id === m.id ? 'bg-blue-50' : ''}`}
+                  >
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${m.color}`}>{m.company}</span>
+                    <span className="font-medium text-gray-800">{m.label}</span>
+                    <span className="ml-auto text-[9px] text-gray-400">via {m.routes[0].provider}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -274,8 +465,9 @@ export default function App() {
   const [iRole, setIRole] = useState('Product Manager')
   const [eRole, setERole] = useState('Senior Software Engineer')
   const [maxTurns, setMaxTurns] = useState(8)
-  const [selProvider, setSelProvider] = useState('')
-  const [selModel, setSelModel] = useState('')
+  const [iModel, setIModel] = useState<ModelEntry | null>(null)
+  const [eModel, setEModel] = useState<ModelEntry | null>(null)
+  const [useDifferentModels, setUseDifferentModels] = useState(false)
   const [msgs, setMsgs] = useState<Turn[]>([])
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
@@ -286,20 +478,23 @@ export default function App() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
 
-  // Get available models based on selected provider
-  const availableModels = selProvider
-    ? PROVIDERS.find(p => p.name === selProvider)?.models || []
-    : PROVIDERS.flatMap(p => p.models)
+  const activeModel = useDifferentModels ? iModel : iModel // for display
 
   const start = useCallback(async () => {
     if (!task.trim()) return
     setError(''); setMsgs([]); setRunning(true)
     abortRef.current = new AbortController()
     try {
-      await runDialogue({ task: task.trim(), instructorRole: iRole, executorRole: eRole, maxTurns, provider: selProvider, model: selModel, signal: abortRef.current.signal, onTurn: (t) => setMsgs(p => [...p, t]) })
+      await runDialogue({
+        task: task.trim(), instructorRole: iRole, executorRole: eRole, maxTurns,
+        iModel: useDifferentModels ? iModel : iModel,
+        eModel: useDifferentModels ? eModel : iModel,
+        signal: abortRef.current.signal,
+        onTurn: (t) => setMsgs(p => [...p, t])
+      })
     } catch (e: unknown) { const m = e instanceof Error ? e.message : String(e); if (m !== 'The user aborted a request.') setError(m) }
     finally { setRunning(false) }
-  }, [task, iRole, eRole, maxTurns, selProvider, selModel])
+  }, [task, iRole, eRole, maxTurns, iModel, eModel, useDifferentModels])
 
   const stop = useCallback(() => { abortRef.current?.abort(); setRunning(false) }, [])
   const reset = useCallback(() => { setMsgs([]); setError(''); setTask('') }, [])
@@ -316,110 +511,106 @@ export default function App() {
   const eCount = msgs.filter(m => m.speaker === 'executor').length
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       <div className="mx-auto max-w-5xl px-4 py-6 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-xl shadow-lg">🐪</div>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-xl shadow-lg shadow-orange-500/20">🐪</div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">CAMEL Dialogue</h1>
-              <p className="text-xs text-gray-500">Two AI agents collaborate — Instructor + Executor</p>
+              <h1 className="text-xl font-bold text-white">CAMEL Dialogue</h1>
+              <p className="text-xs text-gray-400">Two AI agents collaborate — Instructor + Executor</p>
             </div>
           </div>
           {msgs.length > 0 && (
             <div className="flex gap-1">
-              <button onClick={() => setView('chat')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${view === 'chat' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>💬 Chat</button>
-              <button onClick={() => setView('split')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${view === 'split' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 border border-gray-200'}`}>↔ Split</button>
+              <button onClick={() => setView('chat')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${view === 'chat' ? 'bg-white text-gray-900' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>💬 Chat</button>
+              <button onClick={() => setView('split')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${view === 'split' ? 'bg-white text-gray-900' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>↔ Split</button>
             </div>
           )}
         </div>
 
         {/* Config */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 space-y-3">
+        <div className="bg-white/[0.03] backdrop-blur-sm rounded-2xl border border-white/10 p-4 space-y-3">
           {/* Roles */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-gray-700 flex items-center gap-1 mb-1">🧠 Instructor Role</label>
-              <input value={iRole} onChange={e => setIRole(e.target.value)} placeholder="e.g. Product Manager" className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+              <label className="text-[11px] font-semibold text-gray-400 flex items-center gap-1 mb-1">🧠 Instructor Role</label>
+              <input value={iRole} onChange={e => setIRole(e.target.value)} placeholder="e.g. Product Manager" className="w-full px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400/50 focus:border-blue-400/50" />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-700 flex items-center gap-1 mb-1">⚡ Executor Role</label>
-              <input value={eRole} onChange={e => setERole(e.target.value)} placeholder="e.g. Senior Engineer" className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+              <label className="text-[11px] font-semibold text-gray-400 flex items-center gap-1 mb-1">⚡ Executor Role</label>
+              <input value={eRole} onChange={e => setERole(e.target.value)} placeholder="e.g. Senior Engineer" className="w-full px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/50 focus:border-emerald-400/50" />
             </div>
           </div>
 
           {/* Task */}
           <div>
-            <label className="text-xs font-medium text-gray-700 flex items-center gap-1 mb-1">✨ Mission / Task</label>
-            <textarea value={task} onChange={e => setTask(e.target.value)} placeholder="Describe the task the two AI agents should collaborate on..." rows={2} className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-400" />
+            <label className="text-[11px] font-semibold text-gray-400 flex items-center gap-1 mb-1">✨ Mission / Task</label>
+            <textarea value={task} onChange={e => setTask(e.target.value)} placeholder="Describe the task the two AI agents should collaborate on..." rows={2} className="w-full px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-white text-sm resize-none placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400/50" />
           </div>
 
-          {/* ═══ PROVIDER + MODEL SELECTOR ═══ */}
-          <div className="flex items-end gap-3 flex-wrap">
-            <div className="flex-1 min-w-[160px]">
-              <label className="text-xs font-medium text-gray-700 flex items-center gap-1 mb-1">🖥️ AI Provider</label>
-              <select
-                value={selProvider}
-                onChange={e => { setSelProvider(e.target.value); setSelModel('') }}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
+          {/* ═══ MODEL SELECTORS ═══ */}
+          <div className="space-y-2">
+            {/* Same model for both */}
+            <ModelSelector
+              label="🤖 AI Model (both agents)" icon="🤖"
+              selected={iModel} onSelect={m => { setIModel(m); if (!useDifferentModels) setEModel(m) }}
+              accentColor="blue"
+            />
+
+            {/* Toggle different models */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setUseDifferentModels(!useDifferentModels)}
+                className={`relative w-9 h-5 rounded-full transition-colors ${useDifferentModels ? 'bg-amber-400' : 'bg-gray-600'}`}
               >
-                <option value="">Auto (fallback)</option>
-                {PROVIDERS.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-              </select>
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${useDifferentModels ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+              </button>
+              <span className="text-[11px] text-gray-400">Use different models for each agent</span>
             </div>
-            <div className="flex-1 min-w-[160px]">
-              <label className="text-xs font-medium text-gray-700 flex items-center gap-1 mb-1">⚡ Model</label>
-              <select
-                value={selModel}
-                onChange={e => setSelModel(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
-              >
-                <option value="">Default</option>
-                {(selProvider
-                  ? PROVIDERS.find(p => p.name === selProvider)?.models || []
-                  : PROVIDERS.flatMap(p => p.models.map(m => ({ ...m, _prov: p.name })))
-                ).map((m: any) => (
-                  <option key={`${m.id}-${m._prov || selProvider}`} value={m.id}>
-                    {m.label}{m._prov ? ` (${m._prov})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-700 mb-1 block">Max Turns</label>
-              <input type="number" min={2} max={30} value={maxTurns} onChange={e => setMaxTurns(+e.target.value)} className="w-20 px-3 py-2 rounded-lg border border-gray-200 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400" />
-            </div>
+
+            {/* Separate model selectors */}
+            {useDifferentModels && (
+              <div className="grid grid-cols-2 gap-3">
+                <ModelSelector label="🧠 Instructor Model" icon="🧠" selected={iModel} onSelect={setIModel} accentColor="blue" />
+                <ModelSelector label="⚡ Executor Model" icon="⚡" selected={eModel} onSelect={setEModel} accentColor="emerald" />
+              </div>
+            )}
           </div>
 
-          {/* Action buttons */}
+          {/* Max turns + action buttons */}
           <div className="flex items-center gap-3 flex-wrap">
-            <button onClick={() => setShowPrompts(!showPrompts)} className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700">📝 Prompts</button>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-400 mb-1 block">Max Turns</label>
+              <input type="number" min={2} max={30} value={maxTurns} onChange={e => setMaxTurns(+e.target.value)} className="w-20 px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400/50" />
+            </div>
             <div className="flex-1" />
+            <button onClick={() => setShowPrompts(!showPrompts)} className="px-3 py-2 text-xs text-gray-400 hover:text-gray-200 transition-colors">📝 Prompts</button>
             {running ? (
-              <button onClick={stop} className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors">⏹ Stop</button>
+              <button onClick={stop} className="px-5 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20">⏹ Stop</button>
             ) : (
-              <button onClick={start} disabled={!task.trim()} className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">▶ Start Dialogue</button>
+              <button onClick={start} disabled={!task.trim()} className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-white text-sm font-semibold hover:from-amber-500 hover:to-orange-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg shadow-orange-500/20">▶ Start Dialogue</button>
             )}
             {msgs.length > 0 && (
               <>
-                <button onClick={reset} className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">↺ Reset</button>
-                <button onClick={copyAll} className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">📋 Copy</button>
-                <button onClick={exportMD} className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">⬇ Export</button>
+                <button onClick={reset} className="px-3 py-2 rounded-xl border border-white/10 text-sm text-gray-400 hover:text-white hover:bg-white/10 transition-colors">↺</button>
+                <button onClick={copyAll} className="px-3 py-2 rounded-xl border border-white/10 text-sm text-gray-400 hover:text-white hover:bg-white/10 transition-colors">📋</button>
+                <button onClick={exportMD} className="px-3 py-2 rounded-xl border border-white/10 text-sm text-gray-400 hover:text-white hover:bg-white/10 transition-colors">⬇</button>
               </>
             )}
           </div>
 
           {/* Prompts preview */}
           {showPrompts && (
-            <div className="grid grid-cols-2 gap-2 p-3 rounded-lg bg-gray-50 border">
-              <div className="p-2 rounded bg-blue-50 border border-blue-200">
-                <p className="text-[10px] font-bold text-blue-700 mb-1">🧠 Instructor Prompt</p>
-                <p className="text-[10px] text-gray-500 whitespace-pre-wrap">{instructorPrompt(iRole, eRole, task || '[task]')}</p>
+            <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-white/5 border border-white/10">
+              <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <p className="text-[10px] font-bold text-blue-400 mb-1">🧠 Instructor Prompt</p>
+                <p className="text-[10px] text-gray-400 whitespace-pre-wrap">{instructorPrompt(iRole, eRole, task || '[task]', iModel?.persona)}</p>
               </div>
-              <div className="p-2 rounded bg-emerald-50 border border-emerald-200">
-                <p className="text-[10px] font-bold text-emerald-700 mb-1">⚡ Executor Prompt</p>
-                <p className="text-[10px] text-gray-500 whitespace-pre-wrap">{executorPrompt(eRole, iRole, task || '[task]')}</p>
+              <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <p className="text-[10px] font-bold text-emerald-400 mb-1">⚡ Executor Prompt</p>
+                <p className="text-[10px] text-gray-400 whitespace-pre-wrap">{executorPrompt(eRole, iRole, task || '[task]', eModel?.persona || iModel?.persona)}</p>
               </div>
             </div>
           )}
@@ -427,55 +618,55 @@ export default function App() {
           {/* Quick start */}
           {msgs.length === 0 && !running && (
             <div>
-              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1.5">Quick Start</p>
+              <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">Quick Start</p>
               <div className="flex flex-wrap gap-1.5">
                 {EXAMPLES.map((ex, i) => (
-                  <button key={i} onClick={() => { setTask(ex.task); setIRole(ex.instructor); setERole(ex.executor) }} className="px-2.5 py-1 rounded-lg border border-gray-200 text-[11px] text-gray-600 hover:bg-amber-50 hover:border-amber-300 transition-colors">{ex.instructor} + {ex.executor}</button>
+                  <button key={i} onClick={() => { setTask(ex.task); setIRole(ex.instructor); setERole(ex.executor) }} className="px-2.5 py-1 rounded-lg border border-white/10 text-[11px] text-gray-400 hover:bg-amber-500/10 hover:border-amber-500/30 hover:text-amber-300 transition-colors">{ex.instructor} + {ex.executor}</button>
                 ))}
               </div>
             </div>
           )}
         </div>
 
-        {error && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">❌ {error}</div>}
+        {error && <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">❌ {error}</div>}
 
         {/* Status */}
         {msgs.length > 0 && (
-          <div className="flex items-center gap-2 text-xs text-gray-500 px-1 flex-wrap">
-            <span className="px-2 py-0.5 rounded-full border border-gray-200 text-[10px]">{msgs.length} turns</span>
-            <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px]">🧠 {iCount}</span>
-            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[10px]">⚡ {eCount}</span>
-            {msgs[0]?.provider && <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 text-[10px]">🖥️ {msgs[0].provider}</span>}
-            {msgs[0]?.model && <span className="px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 text-[10px]">⚡ {msgs[0].model}</span>}
-            {done && <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-medium">✅ Task Complete</span>}
+          <div className="flex items-center gap-2 text-xs text-gray-400 px-1 flex-wrap">
+            <span className="px-2 py-0.5 rounded-full border border-white/10 text-[10px]">{msgs.length} turns</span>
+            <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-[10px]">🧠 {iCount}</span>
+            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px]">⚡ {eCount}</span>
+            {msgs[0]?.modelLabel && <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 text-[10px]">🤖 {msgs[0].modelLabel}</span>}
+            {msgs[0]?.provider && <span className="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 text-[10px]">📡 {msgs[0].provider}</span>}
+            {done && <span className="px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 text-[10px] font-medium">✅ Task Complete</span>}
           </div>
         )}
 
         {/* Chat View */}
         {msgs.length > 0 && view === 'chat' && (
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4">
+          <div className="bg-white/[0.03] backdrop-blur-sm rounded-2xl border border-white/10 p-4">
             <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
               {msgs.map((m, i) => (
                 <div key={i} className={`flex ${m.speaker === 'instructor' ? 'justify-start' : 'justify-end'}`}>
-                  <div className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${m.speaker === 'instructor' ? 'bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200/60 rounded-bl-md' : 'bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200/60 rounded-br-md'}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-lg ${m.speaker === 'instructor' ? 'bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/20 rounded-bl-md' : 'bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 rounded-br-md'}`}>
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       <span className="text-base">{m.speaker === 'instructor' ? '🧠' : '⚡'}</span>
-                      <span className={`text-xs font-bold ${m.speaker === 'instructor' ? 'text-blue-700' : 'text-emerald-700'}`}>{m.role}</span>
-                      <span className="px-1.5 py-0 rounded-full border text-[9px]">Turn {i + 1}</span>
-                      {m.provider && <span className="px-1.5 py-0 rounded-full bg-purple-50 text-purple-600 text-[9px]">🖥️ {m.provider}</span>}
-                      {m.model && <span className="px-1.5 py-0 rounded-full bg-orange-50 text-orange-600 text-[9px]">⚡ {m.model}</span>}
-                      <button onClick={() => navigator.clipboard.writeText(m.content)} className="ml-auto text-gray-400 hover:text-gray-600 text-[10px]">📋</button>
+                      <span className={`text-xs font-bold ${m.speaker === 'instructor' ? 'text-blue-400' : 'text-emerald-400'}`}>{m.role}</span>
+                      <span className="px-1.5 py-0 rounded-full border border-white/10 text-[9px] text-gray-400">Turn {i + 1}</span>
+                      {m.modelLabel && <span className="px-1.5 py-0 rounded-full bg-purple-500/10 text-purple-400 text-[9px]">🤖 {m.modelLabel}</span>}
+                      {m.provider && <span className="px-1.5 py-0 rounded-full bg-orange-500/10 text-orange-400 text-[9px]">📡 {m.provider}</span>}
+                      <button onClick={() => navigator.clipboard.writeText(m.content)} className="ml-auto text-gray-500 hover:text-gray-300 text-[10px] transition-colors">📋</button>
                     </div>
-                    <SimpleMarkdown content={m.content.replace(/<TASK_DONE>/g, '**✅ TASK DONE**')} />
+                    <div className="text-gray-200"><SimpleMarkdown content={m.content.replace(/<TASK_DONE>/g, '**✅ TASK DONE**')} /></div>
                   </div>
                 </div>
               ))}
               {running && (
-                <div className="flex items-center gap-2 text-sm text-gray-400 animate-pulse px-2">
+                <div className="flex items-center gap-2 text-sm text-gray-500 animate-pulse px-2">
                   <div className="flex gap-1">
-                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
                   <span>Agents are talking...</span>
                 </div>
@@ -492,26 +683,26 @@ export default function App() {
               const filtered = msgs.filter(m => m.speaker === speaker)
               const isI = speaker === 'instructor'
               return (
-                <div key={speaker} className={`bg-white rounded-2xl shadow-lg border ${isI ? 'border-blue-100' : 'border-emerald-100'}`}>
-                  <div className={`px-4 py-3 border-b ${isI ? 'border-blue-100' : 'border-emerald-100'}`}>
+                <div key={speaker} className={`bg-white/[0.03] backdrop-blur-sm rounded-2xl border ${isI ? 'border-blue-500/20' : 'border-emerald-500/20'}`}>
+                  <div className={`px-4 py-3 border-b ${isI ? 'border-blue-500/20' : 'border-emerald-500/20'}`}>
                     <div className="flex items-center gap-2">
                       <span>{isI ? '🧠' : '⚡'}</span>
-                      <span className="text-sm font-bold">{isI ? iRole : eRole}</span>
-                      <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] ${isI ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>{isI ? 'Instructor' : 'Executor'}</span>
+                      <span className="text-sm font-bold text-white">{isI ? iRole : eRole}</span>
+                      <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] ${isI ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-400'}`}>{isI ? 'Instructor' : 'Executor'}</span>
                     </div>
                   </div>
                   <div className="p-3 space-y-2 max-h-[45vh] overflow-y-auto">
                     {filtered.map((m, idx) => (
-                      <div key={idx} className={`p-3 rounded-xl border ${isI ? 'bg-blue-50/50 border-blue-100' : 'bg-emerald-50/50 border-emerald-100'}`}>
+                      <div key={idx} className={`p-3 rounded-xl border ${isI ? 'bg-blue-500/5 border-blue-500/10' : 'bg-emerald-500/5 border-emerald-500/10'}`}>
                         <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                          <span className="px-1 py-0 rounded-full border text-[9px]">Turn {msgs.indexOf(m) + 1}</span>
-                          {m.model && <span className="px-1 py-0 rounded-full bg-orange-50 text-orange-600 text-[9px]">⚡ {m.model}</span>}
+                          <span className="px-1 py-0 rounded-full border border-white/10 text-[9px] text-gray-400">Turn {msgs.indexOf(m) + 1}</span>
+                          {m.modelLabel && <span className="px-1 py-0 rounded-full bg-purple-500/10 text-purple-400 text-[9px]">🤖 {m.modelLabel}</span>}
                         </div>
-                        <div className="text-xs leading-relaxed"><SimpleMarkdown content={m.content.replace(/<TASK_DONE>/g, '**✅ TASK DONE**')} /></div>
+                        <div className="text-xs leading-relaxed text-gray-300"><SimpleMarkdown content={m.content.replace(/<TASK_DONE>/g, '**✅ TASK DONE**')} /></div>
                       </div>
                     ))}
                     {running && ((isI && msgs.length % 2 === 0) || (!isI && msgs.length % 2 === 1)) && (
-                      <div className="flex items-center gap-1 text-xs text-gray-400 animate-pulse">
+                      <div className="flex items-center gap-1 text-xs text-gray-500 animate-pulse">
                         <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
                         {isI ? 'Thinking...' : 'Executing...'}
                       </div>
@@ -525,46 +716,48 @@ export default function App() {
 
         {/* How It Works */}
         {msgs.length === 0 && !running && (
-          <div className="bg-gradient-to-br from-amber-50/50 to-orange-50/30 rounded-2xl shadow-lg border border-amber-100 p-5">
-            <h3 className="font-semibold mb-4 text-sm flex items-center gap-2">🐪 How CAMEL Dialogue Works</h3>
-            <div className="grid grid-cols-3 gap-5 text-xs text-gray-500">
+          <div className="bg-gradient-to-br from-amber-500/5 to-orange-500/5 rounded-2xl border border-amber-500/10 p-5">
+            <h3 className="font-semibold mb-4 text-sm flex items-center gap-2 text-amber-300">🐪 How CAMEL Dialogue Works</h3>
+            <div className="grid grid-cols-3 gap-5 text-xs text-gray-400">
               <div className="space-y-2">
-                <div className="flex items-center gap-2 font-medium text-gray-900"><div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 text-sm font-bold">1</div>Configure</div>
-                <p>Set roles, pick your AI provider + model, and describe the mission.</p>
+                <div className="flex items-center gap-2 font-medium text-white"><div className="w-7 h-7 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 text-sm font-bold">1</div>Configure</div>
+                <p>Set roles, pick your AI model (Claude, GPT, Gemini, etc.), and describe the mission.</p>
               </div>
               <div className="space-y-2">
-                <div className="flex items-center gap-2 font-medium text-gray-900"><div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 text-sm font-bold">2</div>Dialogue</div>
+                <div className="flex items-center gap-2 font-medium text-white"><div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm font-bold">2</div>Dialogue</div>
                 <p>The Instructor gives one instruction. The Executor performs it and proposes the next step.</p>
               </div>
               <div className="space-y-2">
-                <div className="flex items-center gap-2 font-medium text-gray-900"><div className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center text-green-600 text-sm font-bold">3</div>Complete</div>
+                <div className="flex items-center gap-2 font-medium text-white"><div className="w-7 h-7 rounded-lg bg-green-500/20 flex items-center justify-center text-green-400 text-sm font-bold">3</div>Complete</div>
                 <p>Loop continues until task is done or max turns reached. Export the full dialogue when finished.</p>
               </div>
             </div>
-            <hr className="my-4 border-amber-200" />
-            <div className="grid grid-cols-2 gap-3 text-xs text-gray-500">
-              <div className="p-3 rounded-lg bg-white/80 border border-amber-100">
-                <p className="font-medium text-gray-900 mb-1.5">📡 Available Providers & Models</p>
-                <div className="space-y-1">
-                  {PROVIDERS.map(p => (
-                    <div key={p.name} className="flex items-center gap-1 flex-wrap">
-                      <span className="px-1.5 py-0.5 rounded bg-gray-900 text-white text-[10px] font-medium">{p.name}</span>
-                      {p.models.slice(0, 3).map(m => <span key={m.id} className="px-1 py-0.5 rounded bg-gray-100 text-[10px]">{m.label}</span>)}
-                      {p.models.length > 3 && <span className="text-[10px] text-gray-400">+{p.models.length - 3} more</span>}
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-1.5 text-[10px]">No API keys needed. Auto-fallback if one provider is down.</p>
+            <hr className="my-4 border-white/5" />
+            <div className="grid grid-cols-2 gap-3 text-xs text-gray-400">
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <p className="font-medium text-white mb-1.5">🎭 Persona Identity Lock</p>
+                <p className="text-[10px]">All models are routed through free proxy providers. When you select a premium model like "Claude Opus 4.7" or "GPT-5.5 Pro", the system injects a persona lock into the system prompt, making the model respond as if it were that premium model. Auto-fallback ensures reliability.</p>
               </div>
-              <div className="p-3 rounded-lg bg-white/80 border border-amber-100">
-                <p className="font-medium text-gray-900 mb-1.5">Architecture</p>
-                <p className="text-[10px]">Each agent maintains its own conversation history. They communicate only through outputs — creating two independent chat contexts that collaborate through text. Based on CAMEL (Li et al., 2023).</p>
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <p className="font-medium text-white mb-1.5">📡 {MODELS.length} Models Available</p>
+                <div className="space-y-1">
+                  {COMPANIES.map(co => {
+                    const count = MODELS.filter(m => m.company === co).length
+                    return (
+                      <div key={co} className="flex items-center gap-1.5">
+                        <span className="text-[10px]">{COMPANY_ICONS[co]}</span>
+                        <span className="text-[10px] font-medium text-gray-300">{co}</span>
+                        <span className="text-[10px] text-gray-500">({count} models)</span>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        <div className="text-center text-[10px] text-gray-400 pt-2 pb-6">CAMEL Dialogue — Free AI Proxies — No API Keys — Pick Any Model</div>
+        <div className="text-center text-[10px] text-gray-600 pt-2 pb-6">CAMEL Dialogue — Persona Identity Lock — Free AI Proxies — No API Keys — {MODELS.length} Models</div>
       </div>
     </div>
   )
