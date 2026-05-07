@@ -63,7 +63,7 @@ export default function PersonaAgent() {
       <div className="bg-white/[0.03] backdrop-blur-sm rounded-2xl border border-white/10 p-4 space-y-3">
         <div>
           <label className="text-[11px] font-semibold text-gray-400 flex items-center gap-1 mb-1">🎭 Choose a Persona</label>
-          <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
             {PERSONAS.map(p => (
               <button key={p.id} onClick={() => setSelectedPersona(p)}
                 className={`px-2.5 py-2 rounded-lg text-left transition-all ${selectedPersona.id === p.id ? 'bg-purple-500/20 border border-purple-500/30' : 'bg-white/[0.02] border border-white/5 hover:bg-white/[0.06]'}`}
@@ -90,7 +90,7 @@ export default function PersonaAgent() {
         )}
       </div>
 
-      <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+      <div className="space-y-2 max-h-[40vh] sm:max-h-[50vh] overflow-y-auto pr-1">
         {msgs.length === 0 && (
           <div className="text-center py-8">
             <div className="text-5xl mb-3">{personaEmoji}</div>

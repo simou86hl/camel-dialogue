@@ -287,7 +287,7 @@ export function ModelSelector({ label, icon, selected, onSelect, accentColor }: 
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-slate-800 rounded-xl shadow-2xl border border-white/10 overflow-hidden" style={{ maxHeight: '380px' }}>
+        <div className="absolute z-50 mt-1 w-full left-0 right-0 bg-slate-800 rounded-xl shadow-2xl border border-white/10 overflow-hidden max-h-[280px] sm:max-h-[380px]">
           <div className="p-2 border-b border-white/10 sticky top-0 bg-slate-800 z-10">
             <input
               value={filter} onChange={e => setFilter(e.target.value)}
@@ -302,7 +302,7 @@ export function ModelSelector({ label, icon, selected, onSelect, accentColor }: 
             <span className="px-1.5 py-0.5 rounded bg-gray-200 text-[10px] font-bold text-gray-700">AUTO</span>
             <span className="font-medium text-gray-300">Auto (fastest available)</span>
           </button>
-          <div className="overflow-y-auto" style={{ maxHeight: '310px' }}>
+          <div className="overflow-y-auto" style={{ maxHeight: 'calc(100% - 90px)' }}>
             {grouped.map(g => (
               <div key={g.company}>
                 <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 border-l-4 ${COMPANY_COLORS[g.company] || 'border-l-gray-300'} bg-slate-900/50`}>

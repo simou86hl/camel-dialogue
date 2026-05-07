@@ -154,7 +154,7 @@ export default function BabyAGI() {
           <div className="w-full bg-gray-700 rounded-full h-1.5 mb-3">
             <div className="bg-gradient-to-r from-rose-400 to-pink-500 h-1.5 rounded-full transition-all" style={{ width: `${progress}%` }} />
           </div>
-          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+          <div className="space-y-1.5 max-h-36 sm:max-h-48 overflow-y-auto">
             {tasks.map(t => (
               <div key={t.id} className={`flex items-start gap-2 p-2 rounded-lg ${t.status === 'done' ? 'bg-emerald-500/5' : t.status === 'running' ? 'bg-amber-500/10' : 'bg-white/[0.02]'}`}>
                 <span className="text-sm mt-0.5">{t.status === 'done' ? '✅' : t.status === 'running' ? '⏳' : '⬜'}</span>
@@ -167,7 +167,7 @@ export default function BabyAGI() {
 
       {/* Execution Log */}
       {logs.length > 0 && (
-        <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
+        <div className="space-y-2 max-h-[35vh] sm:max-h-[40vh] overflow-y-auto pr-1">
           {logs.map((log, i) => (
             <div key={i} className={`p-3 rounded-xl border-l-4 ${log.type === 'plan' ? 'bg-blue-500/5 border-l-blue-400' : log.type === 'execute' ? 'bg-emerald-500/5 border-l-emerald-400' : 'bg-amber-500/5 border-l-amber-400'}`}>
               <div className="flex items-center gap-2 mb-1">

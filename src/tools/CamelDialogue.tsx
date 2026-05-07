@@ -90,14 +90,14 @@ export default function CamelDialogue() {
   return (
     <div className="space-y-4">
       <div className="bg-white/[0.03] backdrop-blur-sm rounded-2xl border border-white/10 p-4 space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-[11px] font-semibold text-gray-400 flex items-center gap-1 mb-1">🧠 Instructor Role</label>
-            <input value={iRole} onChange={e => setIRole(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400/50" />
+            <input value={iRole} onChange={e => setIRole(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400/50" />
           </div>
           <div>
             <label className="text-[11px] font-semibold text-gray-400 flex items-center gap-1 mb-1">⚡ Executor Role</label>
-            <input value={eRole} onChange={e => setERole(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/50" />
+            <input value={eRole} onChange={e => setERole(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/50" />
           </div>
         </div>
         <div>
@@ -112,18 +112,18 @@ export default function CamelDialogue() {
           <span className="text-xs text-gray-400">Different models per agent</span>
         </div>
         {useDifferentModels && <ModelSelector label="⚡ Executor Model" icon="⚡" selected={eModel} onSelect={setEModel} accentColor="emerald" />}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2">
             <label className="text-[11px] font-semibold text-gray-400">Max Turns:</label>
-            <input type="number" min={2} max={20} value={maxTurns} onChange={e => setMaxTurns(Number(e.target.value))} className="w-16 px-2 py-1 rounded-lg border border-white/10 bg-white/5 text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400/50" />
+            <input type="number" min={2} max={20} value={maxTurns} onChange={e => setMaxTurns(Number(e.target.value))} className="w-16 px-2 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400/50" />
           </div>
           <div className="flex gap-2 ml-auto">
             {!running ? (
-              <button onClick={start} disabled={!task.trim()} className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-white text-sm font-bold shadow-lg shadow-orange-500/20 hover:shadow-orange-500/40 transition-all disabled:opacity-40">🐪 Start Dialogue</button>
+              <button onClick={start} disabled={!task.trim()} className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-white text-sm font-bold shadow-lg shadow-orange-500/20 hover:shadow-orange-500/40 transition-all disabled:opacity-40">🐪 Start</button>
             ) : (
-              <button onClick={stop} className="px-4 py-2 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-all">⏹ Stop</button>
+              <button onClick={stop} className="px-4 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-all">⏹ Stop</button>
             )}
-            {msgs.length > 0 && <button onClick={reset} className="px-3 py-2 rounded-xl bg-white/10 text-gray-300 text-sm hover:bg-white/20 transition-all">🔄 Reset</button>}
+            {msgs.length > 0 && <button onClick={reset} className="px-3 py-2.5 rounded-xl bg-white/10 text-gray-300 text-sm hover:bg-white/20 transition-all">🔄</button>}
           </div>
         </div>
         {!running && msgs.length === 0 && (
@@ -147,7 +147,7 @@ export default function CamelDialogue() {
       )}
 
       {msgs.length > 0 && view === 'chat' && (
-        <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+        <div className="space-y-2 max-h-[50vh] sm:max-h-[60vh] overflow-y-auto pr-1">
           {msgs.map((t, i) => (
             <div key={i} className={`p-3 rounded-xl border-l-4 ${t.speaker === 'instructor' ? 'bg-blue-500/5 border-l-blue-400' : 'bg-emerald-500/5 border-l-emerald-400'}`}>
               <div className="flex items-center gap-2 mb-1">
@@ -165,7 +165,7 @@ export default function CamelDialogue() {
       )}
 
       {msgs.length > 0 && view === 'split' && (
-        <div className="grid grid-cols-2 gap-3 max-h-[60vh]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[60vh]">
           <div className="space-y-2 overflow-y-auto pr-1">
             <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider">🧠 Instructor ({iRole})</h3>
             {msgs.filter(m => m.speaker === 'instructor').map((t, i) => (

@@ -181,7 +181,7 @@ export default function MultiAgent() {
 
       {error && <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">{error}</div>}
 
-      <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
+      <div className="space-y-2 max-h-[45vh] sm:max-h-[55vh] overflow-y-auto pr-1">
         {msgs.length === 0 && running && (
           <div className="text-center py-8">
             <div className="text-4xl mb-3 animate-bounce">👥</div>
